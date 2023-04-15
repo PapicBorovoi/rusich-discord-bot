@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { createAudioResource, createAudioPlayer, joinVoiceChannel, AudioPlayerStatus, StreamType } = require('@discordjs/voice');
+const { createAudioResource, createAudioPlayer, joinVoiceChannel, AudioPlayerStatus } = require('@discordjs/voice');
 const ytdl = require('ytdl-core');
 
 module.exports = {
@@ -28,17 +28,15 @@ module.exports = {
 
             if (!ytdl.validateURL(link)) {
                 return await interaction.reply('Invalid YouTube video URL.');
+            } else {
+                await interaction.reply(`Playing ${link}`);
             }
 
             const stream = ytdl(link, { filter: 'audioonly' });
-
-            const resource = createAudioResource(stream, {
-                inputType: StreamType.Arbitrary,
-            });
-
             const player = createAudioPlayer();
-            connection.subscribe(player);
+            const resource = createAudioResource(stream);
             player.play(resource);
+            connection.subscribe(player);
 
             await new Promise(resolve => {
                 player.on(AudioPlayerStatus.Idle, resolve);
