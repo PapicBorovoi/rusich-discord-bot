@@ -27,8 +27,8 @@
     "@discordjs/voice": "0.16.x",
     "discord.js": "14.9.x",
     "ffmpeg": "0.0.x",
-    "libsodium-wrappers": "^0.7.11",
-    "ytdl-core": "4.11.x"
+    "libsodium-wrappers": "0.7.x",
+    "play-dl": "1.9.x"
   },
   "devDependencies": {
     "eslint": "^8.38.0"
