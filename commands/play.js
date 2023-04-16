@@ -2,6 +2,8 @@ const { SlashCommandBuilder } = require('discord.js');
 const { createAudioResource, createAudioPlayer, joinVoiceChannel, AudioPlayerStatus } = require('@discordjs/voice');
 const play = require('play-dl');
 
+const queue = [];
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('play')
@@ -26,20 +28,34 @@ module.exports = {
         try {
             const link = interaction.options.getString('link');
 
-            if (!play.yt_validate(link)) {
+            if (play.yt_validate(link) !== 'video') {
                 return await interaction.reply('Invalid YouTube video URL.');
             } else {
-                await interaction.reply(`Playing ${link}`);
+                await interaction.reply(`Now playing:\n${link}`);
+            }
+            queue.push(link);
+
+            const player = createAudioPlayer();
+
+            if (queue.length === 1) {
+                const audio = await play.stream(queue[0]);
+                const resource = createAudioResource(audio.stream, { inputType: audio.type });
+                player.play(resource);
+                connection.subscribe(player);
             }
 
-            const audio = await play.stream(link);
-            const player = createAudioPlayer();
-            const resource = createAudioResource(audio.stream, { inputType: audio.type });
-            player.play(resource);
-            connection.subscribe(player);
-
             await new Promise(resolve => {
-                player.on(AudioPlayerStatus.Idle, resolve);
+                player.on(AudioPlayerStatus.Idle, () => {
+                    queue.shift();
+                    if (queue.length > 0) {
+                        play.stream(queue[0]).then(stream => {
+                            const resource = createAudioResource(stream.stream, { inputType: stream.type });
+                            player.play(resource);
+                        });
+                    } else {
+                        setTimeout(resolve, 300000);
+                    }
+                });
             });
         } catch (error) {
             console.error(error);
