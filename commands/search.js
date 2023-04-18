@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, PermissionFlagsBits } = require('discord.js');
 const play = require('play-dl');
 
 const makeButton = (search) => {
@@ -40,7 +40,9 @@ module.exports = {
             option
                 .setName('video')
                 .setDescription('query')
-                .setRequired(true)),
+                .setRequired(true))
+        .setDMPermission(false)
+        .setDefaultMemberPermissions(PermissionFlagsBits.ADMINISTRATOR),
     async execute(interaction) {
         const query = interaction.options.getString('video');
         const search = await play.search(query, { limit: 5 });
@@ -48,9 +50,10 @@ module.exports = {
         const filter = i => i.user.id === interaction.user.id;
         try {
             const confirmation = await response.awaitMessageComponent({ filter, time: 120_000 });
-            await interaction.send(confirmation.customId);
+            await response.delete();
+            await interaction.followUp(`You selected ${confirmation.customId}!`);
         } catch {
-            await interaction.editReply({ content: 'You no longer can select song', components: [] });
+            await response.delete();
         }
     },
 };

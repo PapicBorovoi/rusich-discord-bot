@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
 const { createAudioResource, createAudioPlayer, joinVoiceChannel, AudioPlayerStatus, VoiceConnectionStatus } = require('@discordjs/voice');
 const play = require('play-dl');
 
@@ -8,6 +8,32 @@ let connection;
 let isBotConnected = false;
 let firstPlay = true;
 let firstInit = true;
+
+const playSong = async (interaction, link) => {
+    if (firstPlay) {
+        const audio = await play.stream(link);
+        const resource = createAudioResource(audio.stream, { inputType: audio.type });
+        player.play(resource);
+        connection.subscribe(player);
+        await interaction.followUp(`Now playing:\n${(await play.video_info(link)).video_details.url}`);
+        firstPlay = false;
+    } else {
+        queue.push(link);
+        await interaction.followUp(`Added to queue:\n${(await play.video_info(link)).video_details.url}`);
+    }
+};
+
+const makeButton = (search) => {
+    const buttons = new ActionRowBuilder();
+    for (let i = 0; i < search.length; i++) {
+        const button = new ButtonBuilder()
+            .setCustomId(search[i].id)
+            .setLabel(String(i + 1))
+            .setStyle(ButtonStyle.Primary);
+        buttons.addComponents(button);
+    }
+    return buttons;
+};
 
 const makeEmbedFields = (search) => {
     const fields = [];
@@ -23,7 +49,7 @@ const makeEmbedFields = (search) => {
 const makeEmbedResponse = (search) => {
     const embed = new EmbedBuilder()
         .setTitle('Search results')
-        .setAuthor({ name: 'Rusich bot', iconUrl: `${__dirname}/../icons/rusich-icon.svg` })
+        .setAuthor({ name: 'Rusich bot' })
         .setFields(makeEmbedFields(search));
     return embed;
 };
@@ -36,7 +62,8 @@ module.exports = {
             option
                 .setName('video')
                 .setDescription('YouTube link, id or search query.')
-                .setRequired(true)),
+                .setRequired(true))
+        .setDMPermission(false),
     async execute(interaction) {
         const voiceChannel = interaction.member.voice.channel;
 
@@ -52,10 +79,10 @@ module.exports = {
             });
             if (firstInit) {
                 connection.on(VoiceConnectionStatus.Disconnected, () => {
-                    player.stop(true);
-
+                    console.log('Disconnected from voice channel.');
                     queue.length = 0;
                     isBotConnected = false;
+                    player.stop(true);
                 });
                 firstInit = false;
             }
@@ -70,10 +97,17 @@ module.exports = {
             if (play.yt_validate(link) !== 'video' && link.startsWith('http')) {
                 return await interaction.editReply('Invalid YouTube video URL.');
             } else if (play.yt_validate(link) !== 'video' && !link.startsWith('http')) {
-                const search = await play.search(link, { limit: 1 });
+                const search = await play.search(link, { limit: 5 });
                 if (search) {
-                    // await interaction.editReply(makeEmbedResponse(search));
-                    link = search[0].url;
+                    const response = await interaction.editReply({ content: '', embeds: [makeEmbedResponse(search)], components: [makeButton(search)] });
+                    const filter = i => i.user.id === interaction.user.id;
+                    try {
+                        const confirmation = await response.awaitMessageComponent({ filter, time: 120_000 });
+                        link = confirmation.customId;
+                    } catch {
+                        return await interaction.deleteReply();
+                    }
+                    // link = search[0].url;
                 } else {
                     return await interaction.editReply('No results found.');
                 }
@@ -85,18 +119,9 @@ module.exports = {
                 }
             }
 
+            await interaction.deleteReply();
+            playSong(interaction, link);
 
-            if (firstPlay) {
-                const audio = await play.stream(link);
-                const resource = createAudioResource(audio.stream, { inputType: audio.type });
-                player.play(resource);
-                connection.subscribe(player);
-                await interaction.editReply(`Now playing:\n${link}`);
-                firstPlay = false;
-            } else {
-                queue.push(link);
-                await interaction.editReply(`Added to queue:\n${link}`);
-            }
         } catch (error) {
             console.error(error);
             await interaction.editReply('An error occurred while playing the song.');
@@ -113,6 +138,7 @@ player.on(AudioPlayerStatus.Idle, () => {
     } else {
         firstPlay = true;
         setTimeout(() => {
+            if (player.state === AudioPlayerStatus.Playing) return;
             if (connection.state.status !== VoiceConnectionStatus.Destroyed) {
                 connection.destroy();
             }
