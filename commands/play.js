@@ -78,6 +78,11 @@ module.exports = {
                 adapterCreator: interaction.guild.voiceAdapterCreator,
             });
             if (firstInit) {
+                play.setToken({
+                    youtube : {
+                        cookie : 'your cookie here',
+                    },
+               });
                 connection.on(VoiceConnectionStatus.Disconnected, () => {
                     console.log('Disconnected from voice channel.');
                     queue.length = 0;
