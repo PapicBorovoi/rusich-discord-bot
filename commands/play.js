@@ -1,6 +1,8 @@
 const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
 const { createAudioResource, createAudioPlayer, joinVoiceChannel, AudioPlayerStatus, VoiceConnectionStatus } = require('@discordjs/voice');
 const play = require('play-dl');
+const { cookie } = require('../.data/cookie.js');
+
 
 const queue = [];
 const player = createAudioPlayer();
@@ -80,11 +82,10 @@ module.exports = {
             if (firstInit) {
                 play.setToken({
                     youtube : {
-                        cookie : 'your cookie here',
+                        cookie : cookie,
                     },
                });
                 connection.on(VoiceConnectionStatus.Disconnected, () => {
-                    console.log('Disconnected from voice channel.');
                     queue.length = 0;
                     isBotConnected = false;
                     player.stop(true);
@@ -112,7 +113,6 @@ module.exports = {
                     } catch {
                         return await interaction.deleteReply();
                     }
-                    // link = search[0].url;
                 } else {
                     return await interaction.editReply('No results found.');
                 }
@@ -143,11 +143,13 @@ player.on(AudioPlayerStatus.Idle, () => {
     } else {
         firstPlay = true;
         setTimeout(() => {
-            if (player.state === AudioPlayerStatus.Playing) return;
-            if (connection.state.status !== VoiceConnectionStatus.Destroyed) {
+            if (player.state.status !== AudioPlayerStatus.Idle) {
+                return;
+            }
+            if (connection.state.status !== VoiceConnectionStatus.Destroyed && connection.state.status !== VoiceConnectionStatus.Disconnected) {
                 connection.destroy();
             }
             isBotConnected = false;
-        }, 300000);
+        }, 1_800_000);
     }
 });
