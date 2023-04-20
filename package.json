@@ -28,7 +28,9 @@
     "@discordjs/voice": "0.16.x",
     "discord.js": "14.9.x",
     "ffmpeg": "0.0.x",
+    "fs-extra": "11.1.x",
     "libsodium-wrappers": "0.7.x",
+    "mysql2": "3.2.x",
     "play-dl": "1.9.x"
   },
   "devDependencies": {
