@@ -3,24 +3,24 @@ const { createAudioResource, createAudioPlayer, joinVoiceChannel, AudioPlayerSta
 const play = require('play-dl');
 const { cookie } = require('../.data/cookie.js');
 
+const vcInfo = {};
 
-const queue = [];
-const player = createAudioPlayer();
-let connection;
-let isBotConnected = false;
-let firstPlay = true;
-let firstInit = true;
+play.setToken({
+    youtube : {
+        cookie : cookie,
+    },
+});
 
-const playSong = async (interaction, link) => {
-    if (firstPlay) {
+const playSong = async (interaction, link, info) => {
+    if (info.firstPlay) {
         const audio = await play.stream(link);
         const resource = createAudioResource(audio.stream, { inputType: audio.type });
-        player.play(resource);
-        connection.subscribe(player);
+        info.player.play(resource);
+        info.connection.subscribe(info.player);
         await interaction.followUp(`Now playing:\n${(await play.video_info(link)).video_details.url}`);
-        firstPlay = false;
+        info.firstPlay = false;
     } else {
-        queue.push(link);
+        info.queue.push(link);
         await interaction.followUp(`Added to queue:\n${(await play.video_info(link)).video_details.url}`);
     }
 };
@@ -67,32 +67,64 @@ module.exports = {
                 .setRequired(true))
         .setDMPermission(false),
     async execute(interaction) {
+        const guildId = interaction.guildId;
         const voiceChannel = interaction.member.voice.channel;
 
         if (!voiceChannel) {
             return await interaction.reply('You must be in a voice channel to use this command.');
         }
 
-        if (!isBotConnected) {
-            connection = joinVoiceChannel({
+        if (!(guildId in vcInfo)) {
+            vcInfo[guildId] = {
+                player: createAudioPlayer(),
+                connection: joinVoiceChannel({
+                    channelId: voiceChannel.id,
+                    guildId: interaction.guildId,
+                    adapterCreator: interaction.guild.voiceAdapterCreator,
+                }),
+                firstPlay: true,
+                firstInit: true,
+                isBotConnected: false,
+                queue: [],
+            };
+        }
+
+        const info = vcInfo[guildId];
+
+        if (!info.isBotConnected) {
+            info.connection = joinVoiceChannel({
                 channelId: voiceChannel.id,
                 guildId: interaction.guildId,
                 adapterCreator: interaction.guild.voiceAdapterCreator,
             });
-            if (firstInit) {
-                play.setToken({
-                    youtube : {
-                        cookie : cookie,
-                    },
-               });
-                connection.on(VoiceConnectionStatus.Disconnected, () => {
-                    queue.length = 0;
-                    isBotConnected = false;
-                    player.stop(true);
+            if (info.firstInit) {
+                info.connection.on(VoiceConnectionStatus.Disconnected, () => {
+                    info.queue.length = 0;
+                    info.isBotConnected = false;
+                    info.player.stop(true);
                 });
-                firstInit = false;
+                info.player.on(AudioPlayerStatus.Idle, () => {
+                    if (info.queue.length > 0) {
+                        play.stream(info.queue.shift()).then(stream => {
+                            const resource = createAudioResource(stream.stream, { inputType: stream.type });
+                            info.player.play(resource);
+                        });
+                    } else {
+                        info.firstPlay = true;
+                        setTimeout(() => {
+                            if (info.player.state.status !== AudioPlayerStatus.Idle) {
+                                return;
+                            }
+                            if (info.connection.state.status !== VoiceConnectionStatus.Destroyed && info.connection.state.status !== VoiceConnectionStatus.Disconnected) {
+                                info.connection.destroy();
+                            }
+                            info.isBotConnected = false;
+                        }, 1_800_000);
+                    }
+                });
+                info.firstInit = false;
             }
-            isBotConnected = true;
+            info.isBotConnected = true;
         }
 
         try {
@@ -125,31 +157,24 @@ module.exports = {
             }
 
             await interaction.deleteReply();
-            playSong(interaction, link);
+            playSong(interaction, link, info);
 
         } catch (error) {
             console.error(error);
             await interaction.editReply('An error occurred while playing the song.');
         }
     },
-queue, player };
+vcInfo };
 
-player.on(AudioPlayerStatus.Idle, () => {
-    if (queue.length > 0) {
-        play.stream(queue.shift()).then(stream => {
-            const resource = createAudioResource(stream.stream, { inputType: stream.type });
-            player.play(resource);
-        });
-    } else {
-        firstPlay = true;
-        setTimeout(() => {
-            if (player.state.status !== AudioPlayerStatus.Idle) {
-                return;
-            }
-            if (connection.state.status !== VoiceConnectionStatus.Destroyed && connection.state.status !== VoiceConnectionStatus.Disconnected) {
-                connection.destroy();
-            }
-            isBotConnected = false;
-        }, 1_800_000);
-    }
-});
+/*
+const SCHEMA = {
+    'guildId': {
+        'player': 'player object',
+        'connection': 'connection object',
+        'firstPlay': 'bool',
+        'firstInit': 'bool',
+        'isBotConnected': 'bool',
+        'queue': 'array of songs urls',
+    },
+};
+*/
