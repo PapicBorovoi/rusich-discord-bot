@@ -3,3 +3,4 @@ package-lock.json
 settings/config.json
 .DS_Store
 .data/*
+music/*
